@@ -1,216 +1,205 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Borra la sal</title>
-  <style>
-    :root {
-      --fondo: #0e1116;
-    }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body {
-      height: 100%;
-      overflow: hidden;
-      background: var(--fondo);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      -webkit-user-select: none;
-      user-select: none;
-      -webkit-touch-callout: none;
-      touch-action: none;
-    }
-    #escena {
-      position: fixed;
-      inset: 0;
-      display: grid;
-      place-items: center;
-      text-align: center;
-      color: #e8eef7;
-      padding: 24px;
-    }
-    #mensaje h1 {
-      font-size: clamp(28px, 8vw, 64px);
-      font-weight: 800;
-      letter-spacing: -0.02em;
-      background: linear-gradient(135deg, #8ad4ff, #b48cff);
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-    }
-    #mensaje p {
-      margin-top: 12px;
-      font-size: clamp(14px, 3.5vw, 20px);
-      color: #9aa7b8;
-    }
-    /* La capa de sal cubre todo y se dibuja en el canvas */
-    #sal {
-      position: fixed;
-      inset: 0;
-      display: block;
-      cursor: crosshair;
-    }
-    #reiniciar {
-      position: fixed;
-      left: 50%;
-      bottom: 24px;
-      transform: translateX(-50%);
-      z-index: 10;
-      border: none;
-      padding: 12px 22px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.12);
-      color: #fff;
-      font-size: 15px;
-      font-weight: 600;
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      cursor: pointer;
-      transition: background 0.2s, opacity 0.4s;
-    }
-    #reiniciar:hover { background: rgba(255, 255, 255, 0.22); }
-    #pista {
-      position: fixed;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 5;
-      color: #5b6472;
-      font-size: 14px;
-      pointer-events: none;
-      transition: opacity 0.6s;
-    }
-  </style>
-</head>
-<body>
-  <!-- Lo que se descubre debajo de la sal -->
-  <div id="escena">
-    <div id="mensaje">
-      <h1>¡Lo lograste!</h1>
-      <p>Has borrado toda la sal ✨</p>
-    </div>
-  </div>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Borra las rayas</title>
+<style>
+  html, body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: #000;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    touch-action: none;
+  }
+  * { box-sizing: border-box; }
+  #lienzo {
+    position: fixed;
+    inset: 0;
+    display: block;
+    cursor: crosshair;
+  }
+  #reiniciar {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    z-index: 10;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    padding: 12px 22px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #e6e6e6;
+    font-size: 15px;
+    font-weight: 600;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  #reiniciar:hover { background: rgba(255, 255, 255, 0.16); }
+  #reiniciar:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+  #pista {
+    position: fixed;
+    top: 26px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    color: #6a6a6a;
+    font-size: 14px;
+    letter-spacing: 0.02em;
+    pointer-events: none;
+    transition: opacity 0.6s;
+  }
+</style>
 
-  <div id="pista">Pasa el dedo para borrar la sal</div>
+<canvas id="lienzo"></canvas>
+<div id="pista">Pasa el dedo para borrar las rayas</div>
+<button id="reiniciar">Volver a poner las rayas</button>
 
-  <!-- La capa de sal -->
-  <canvas id="sal"></canvas>
+<script>
+  const canvas = document.getElementById("lienzo");
+  const ctx = canvas.getContext("2d");
+  const pista = document.getElementById("pista");
 
-  <button id="reiniciar">Volver a llenar de sal</button>
+  let ancho = 0, alto = 0, dpr = 1;
+  const radioBorrado = 26;
+  let ultimoPunto = null;
+  let borrando = false;
 
-  <script>
-    const canvas = document.getElementById("sal");
-    const ctx = canvas.getContext("2d", { willReadFrequently: false });
-    const pista = document.getElementById("pista");
+  // Rayas en coordenadas relativas (se adaptan al tamaño de pantalla),
+  // inspiradas en la foto: verticales, con ligera inclinación y longitudes distintas.
+  const rayas = [
+    { x: 0.17, top: 0.22, bottom: 0.62, lean: 0.015, w: 0.026, semilla: 11 },
+    { x: 0.35, top: 0.13, bottom: 0.74, lean: 0.010, w: 0.032, semilla: 27 },
+    { x: 0.51, top: 0.30, bottom: 0.92, lean: 0.045, w: 0.028, semilla: 41 },
+    { x: 0.75, top: 0.20, bottom: 0.70, lean: 0.020, w: 0.030, semilla: 63 },
+  ];
 
-    let ancho = 0, alto = 0, dpr = 1;
-    let radioBorrado = 28;      // radio del "dedo" que borra
-    let ultimoPunto = null;
+  function dibujarRaya(r) {
+    const topY = r.top * alto;
+    const botY = r.bottom * alto;
+    const largo = botY - topY;
+    const baseX = r.x * ancho;
+    const drift = r.lean * ancho;         // inclinación total
+    const spread = Math.max(3, r.w * ancho * 0.5); // mitad del ancho de dispersión
+    const paso = 0.7;
 
-    // Dibuja una textura de sal granulada que llena todo el canvas
-    function dibujarSal() {
-      // Base gris muy claro con un leve degradado
-      const grad = ctx.createLinearGradient(0, 0, ancho, alto);
-      grad.addColorStop(0, "#f4f5f7");
-      grad.addColorStop(1, "#dfe3e8");
-      ctx.globalCompositeOperation = "source-over";
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, ancho, alto);
+    for (let y = topY; y <= botY; y += paso) {
+      const f = (y - topY) / largo;
+      // línea central: inclinación + una leve ondulación
+      const wobble =
+        Math.sin(f * 9 + r.semilla) * spread * 0.5 +
+        Math.sin(f * 23 + r.semilla * 2) * spread * 0.25;
+      const cx = baseX + drift * f + wobble;
 
-      // Granos de sal: puntos blancos y grises dispersos
-      const area = ancho * alto;
-      const totalGranos = Math.min(120000, Math.floor(area / 12));
-      for (let i = 0; i < totalGranos; i++) {
-        const x = Math.random() * ancho;
-        const y = Math.random() * alto;
-        const t = Math.random();
-        // mezcla de blancos brillantes y grises para dar textura
-        if (t < 0.5) {
-          ctx.fillStyle = "rgba(255,255,255," + (0.5 + Math.random() * 0.5) + ")";
-        } else if (t < 0.85) {
-          ctx.fillStyle = "rgba(190,196,204," + (0.3 + Math.random() * 0.4) + ")";
-        } else {
-          ctx.fillStyle = "rgba(150,157,168," + (0.2 + Math.random() * 0.3) + ")";
-        }
+      // más brillo cerca del centro vertical, y una punta brillante abajo (reflejo)
+      const perfil = 0.7 + 0.3 * Math.sin(f * Math.PI);
+      const reflejo = f > 0.88 ? 1.3 : 1;
+
+      // núcleo blanco sólido: una franja central compacta y brillante
+      const coreHalf = Math.max(1.2, spread * 0.4);
+      const aCore = Math.min(1, perfil * reflejo);
+      ctx.fillStyle = "rgba(255,255,255," + aCore + ")";
+      ctx.fillRect(cx - coreHalf, y, coreHalf * 2, paso + 0.6);
+
+      // halo granulado alrededor del núcleo
+      const granos = Math.max(8, Math.floor(spread * 3));
+      for (let g = 0; g < granos; g++) {
+        // desplazamiento tipo gaussiano respecto al centro
+        const gauss = (Math.random() + Math.random() + Math.random() - 1.5) / 1.5;
+        const off = gauss * spread;
+        const d = Math.min(1, Math.abs(off) / spread);
+        const px = cx + off;
+        let a = Math.pow(1 - d, 1.4) * perfil * reflejo * (0.55 + Math.random() * 0.45);
+        if (a <= 0.02) continue;
+        // núcleo blanco puro, bordes ligeramente grises
+        const tono = d < 0.4 ? 255 : 205 + Math.floor(Math.random() * 40);
+        ctx.fillStyle = "rgba(" + tono + "," + tono + "," + tono + "," + Math.min(1, a) + ")";
         const s = Math.random() < 0.15 ? 2 : 1;
-        ctx.fillRect(x, y, s, s);
-      }
-      ctx.globalCompositeOperation = "destination-out";
-      pista.style.opacity = "1";
-    }
-
-    function ajustarTamano() {
-      dpr = Math.min(window.devicePixelRatio || 1, 2);
-      ancho = window.innerWidth;
-      alto = window.innerHeight;
-      canvas.width = Math.floor(ancho * dpr);
-      canvas.height = Math.floor(alto * dpr);
-      canvas.style.width = ancho + "px";
-      canvas.style.height = alto + "px";
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      dibujarSal();
-    }
-
-    // Borra un círculo suave en la posición dada
-    function borrarEn(x, y) {
-      ctx.beginPath();
-      ctx.arc(x, y, radioBorrado, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Une el punto anterior con el actual para que el trazo sea continuo
-    function borrarLinea(x1, y1, x2, y2) {
-      const dist = Math.hypot(x2 - x1, y2 - y1);
-      const pasos = Math.max(1, Math.floor(dist / (radioBorrado / 3)));
-      for (let i = 0; i <= pasos; i++) {
-        const t = i / pasos;
-        borrarEn(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t);
+        ctx.fillRect(px, y, s, s);
       }
     }
+  }
 
-    function posicion(e) {
-      const t = e.touches && e.touches[0] ? e.touches[0] : e;
-      return { x: t.clientX, y: t.clientY };
+  function dibujarRayas() {
+    ctx.globalCompositeOperation = "source-over";
+    ctx.clearRect(0, 0, ancho, alto); // lienzo transparente -> se ve el fondo negro del body
+    for (const r of rayas) dibujarRaya(r);
+    ctx.globalCompositeOperation = "destination-out";
+    pista.style.opacity = "1";
+  }
+
+  function ajustarTamano() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    ancho = window.innerWidth;
+    alto = window.innerHeight;
+    canvas.width = Math.floor(ancho * dpr);
+    canvas.height = Math.floor(alto * dpr);
+    canvas.style.width = ancho + "px";
+    canvas.style.height = alto + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    dibujarRayas();
+  }
+
+  function borrarEn(x, y) {
+    ctx.beginPath();
+    ctx.arc(x, y, radioBorrado, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function borrarLinea(x1, y1, x2, y2) {
+    const dist = Math.hypot(x2 - x1, y2 - y1);
+    const pasos = Math.max(1, Math.floor(dist / (radioBorrado / 3)));
+    for (let i = 0; i <= pasos; i++) {
+      const t = i / pasos;
+      borrarEn(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t);
     }
+  }
 
-    let borrando = false;
+  function posicion(e) {
+    const t = e.touches && e.touches[0] ? e.touches[0] : e;
+    return { x: t.clientX, y: t.clientY };
+  }
 
-    function inicio(e) {
-      borrando = true;
-      pista.style.opacity = "0";
-      const p = posicion(e);
-      ultimoPunto = p;
-      borrarEn(p.x, p.y);
-      e.preventDefault();
-    }
+  function inicio(e) {
+    borrando = true;
+    pista.style.opacity = "0";
+    const p = posicion(e);
+    ultimoPunto = p;
+    borrarEn(p.x, p.y);
+    e.preventDefault();
+  }
 
-    function mover(e) {
-      if (!borrando) return;
-      const p = posicion(e);
-      if (ultimoPunto) borrarLinea(ultimoPunto.x, ultimoPunto.y, p.x, p.y);
-      ultimoPunto = p;
-      e.preventDefault();
-    }
+  function mover(e) {
+    if (!borrando) return;
+    const p = posicion(e);
+    if (ultimoPunto) borrarLinea(ultimoPunto.x, ultimoPunto.y, p.x, p.y);
+    ultimoPunto = p;
+    e.preventDefault();
+  }
 
-    function fin() {
-      borrando = false;
-      ultimoPunto = null;
-    }
+  function fin() {
+    borrando = false;
+    ultimoPunto = null;
+  }
 
-    // Ratón (escritorio)
-    canvas.addEventListener("mousedown", inicio);
-    window.addEventListener("mousemove", mover);
-    window.addEventListener("mouseup", fin);
+  canvas.addEventListener("mousedown", inicio);
+  window.addEventListener("mousemove", mover);
+  window.addEventListener("mouseup", fin);
+  canvas.addEventListener("touchstart", inicio, { passive: false });
+  canvas.addEventListener("touchmove", mover, { passive: false });
+  canvas.addEventListener("touchend", fin);
+  canvas.addEventListener("touchcancel", fin);
 
-    // Táctil (móvil)
-    canvas.addEventListener("touchstart", inicio, { passive: false });
-    canvas.addEventListener("touchmove", mover, { passive: false });
-    canvas.addEventListener("touchend", fin);
-    canvas.addEventListener("touchcancel", fin);
+  document.getElementById("reiniciar").addEventListener("click", dibujarRayas);
+  window.addEventListener("resize", ajustarTamano);
 
-    document.getElementById("reiniciar").addEventListener("click", dibujarSal);
-    window.addEventListener("resize", ajustarTamano);
+  ajustarTamano();
+</script>
 
-    ajustarTamano();
-  </script>
-</body>
 </html>
