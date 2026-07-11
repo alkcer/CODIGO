@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Borra la sal</title>
+  <style>
+    :root {
+      --fondo: #0e1116;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      background: var(--fondo);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+      touch-action: none;
+    }
+    #escena {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      color: #e8eef7;
+      padding: 24px;
+    }
+    #mensaje h1 {
+      font-size: clamp(28px, 8vw, 64px);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #8ad4ff, #b48cff);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    #mensaje p {
+      margin-top: 12px;
+      font-size: clamp(14px, 3.5vw, 20px);
+      color: #9aa7b8;
+    }
+    /* La capa de sal cubre todo y se dibuja en el canvas */
+    #sal {
+      position: fixed;
+      inset: 0;
+      display: block;
+      cursor: crosshair;
+    }
+    #reiniciar {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translateX(-50%);
+      z-index: 10;
+      border: none;
+      padding: 12px 22px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      cursor: pointer;
+      transition: background 0.2s, opacity 0.4s;
+    }
+    #reiniciar:hover { background: rgba(255, 255, 255, 0.22); }
+    #pista {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 5;
+      color: #5b6472;
+      font-size: 14px;
+      pointer-events: none;
+      transition: opacity 0.6s;
+    }
+  </style>
+</head>
+<body>
+  <!-- Lo que se descubre debajo de la sal -->
+  <div id="escena">
+    <div id="mensaje">
+      <h1>¡Lo lograste!</h1>
+      <p>Has borrado toda la sal ✨</p>
+    </div>
+  </div>
+
+  <div id="pista">Pasa el dedo para borrar la sal</div>
+
+  <!-- La capa de sal -->
+  <canvas id="sal"></canvas>
+
+  <button id="reiniciar">Volver a llenar de sal</button>
+
+  <script>
+    const canvas = document.getElementById("sal");
+    const ctx = canvas.getContext("2d", { willReadFrequently: false });
+    const pista = document.getElementById("pista");
+
+    let ancho = 0, alto = 0, dpr = 1;
+    let radioBorrado = 28;      // radio del "dedo" que borra
+    let ultimoPunto = null;
+
+    // Dibuja una textura de sal granulada que llena todo el canvas
+    function dibujarSal() {
+      // Base gris muy claro con un leve degradado
+      const grad = ctx.createLinearGradient(0, 0, ancho, alto);
+      grad.addColorStop(0, "#f4f5f7");
+      grad.addColorStop(1, "#dfe3e8");
+      ctx.globalCompositeOperation = "source-over";
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, ancho, alto);
+
+      // Granos de sal: puntos blancos y grises dispersos
+      const area = ancho * alto;
+      const totalGranos = Math.min(120000, Math.floor(area / 12));
+      for (let i = 0; i < totalGranos; i++) {
+        const x = Math.random() * ancho;
+        const y = Math.random() * alto;
+        const t = Math.random();
+        // mezcla de blancos brillantes y grises para dar textura
+        if (t < 0.5) {
+          ctx.fillStyle = "rgba(255,255,255," + (0.5 + Math.random() * 0.5) + ")";
+        } else if (t < 0.85) {
+          ctx.fillStyle = "rgba(190,196,204," + (0.3 + Math.random() * 0.4) + ")";
+        } else {
+          ctx.fillStyle = "rgba(150,157,168," + (0.2 + Math.random() * 0.3) + ")";
+        }
+        const s = Math.random() < 0.15 ? 2 : 1;
+        ctx.fillRect(x, y, s, s);
+      }
+      ctx.globalCompositeOperation = "destination-out";
+      pista.style.opacity = "1";
+    }
+
+    function ajustarTamano() {
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      ancho = window.innerWidth;
+      alto = window.innerHeight;
+      canvas.width = Math.floor(ancho * dpr);
+      canvas.height = Math.floor(alto * dpr);
+      canvas.style.width = ancho + "px";
+      canvas.style.height = alto + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      dibujarSal();
+    }
+
+    // Borra un círculo suave en la posición dada
+    function borrarEn(x, y) {
+      ctx.beginPath();
+      ctx.arc(x, y, radioBorrado, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Une el punto anterior con el actual para que el trazo sea continuo
+    function borrarLinea(x1, y1, x2, y2) {
+      const dist = Math.hypot(x2 - x1, y2 - y1);
+      const pasos = Math.max(1, Math.floor(dist / (radioBorrado / 3)));
+      for (let i = 0; i <= pasos; i++) {
+        const t = i / pasos;
+        borrarEn(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t);
+      }
+    }
+
+    function posicion(e) {
+      const t = e.touches && e.touches[0] ? e.touches[0] : e;
+      return { x: t.clientX, y: t.clientY };
+    }
+
+    let borrando = false;
+
+    function inicio(e) {
+      borrando = true;
+      pista.style.opacity = "0";
+      const p = posicion(e);
+      ultimoPunto = p;
+      borrarEn(p.x, p.y);
+      e.preventDefault();
+    }
+
+    function mover(e) {
+      if (!borrando) return;
+      const p = posicion(e);
+      if (ultimoPunto) borrarLinea(ultimoPunto.x, ultimoPunto.y, p.x, p.y);
+      ultimoPunto = p;
+      e.preventDefault();
+    }
+
+    function fin() {
+      borrando = false;
+      ultimoPunto = null;
+    }
+
+    // Ratón (escritorio)
+    canvas.addEventListener("mousedown", inicio);
+    window.addEventListener("mousemove", mover);
+    window.addEventListener("mouseup", fin);
+
+    // Táctil (móvil)
+    canvas.addEventListener("touchstart", inicio, { passive: false });
+    canvas.addEventListener("touchmove", mover, { passive: false });
+    canvas.addEventListener("touchend", fin);
+    canvas.addEventListener("touchcancel", fin);
+
+    document.getElementById("reiniciar").addEventListener("click", dibujarSal);
+    window.addEventListener("resize", ajustarTamano);
+
+    ajustarTamano();
+  </script>
+</body>
+</html>
