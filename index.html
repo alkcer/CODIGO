@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>Polvo que se agita en rayas</title>
+<title>Borra las rayas</title>
 <style>
   html, body {
     height: 100%;
@@ -60,8 +60,8 @@
 </style>
 
 <canvas id="lienzo"></canvas>
-<div id="pista">Agita el teléfono para formar las 3 rayas</div>
-<button id="boton">Activar sensor de movimiento</button>
+<div id="pista">Pasa el dedo para borrar las rayas</div>
+<button id="boton">↺ Reiniciar</button>
 
 <script>
   const canvas = document.getElementById("lienzo");
@@ -73,18 +73,11 @@
   const radioBorrado = 28;
   let ultimoPunto = null, borrando = false;
 
-  // "pila" = polvo amontonado en el centro; "rayas" = repartido en 3 lineas
-  let estado = "pila";
-  let sensorActivo = false;
-
-  const esIOS = typeof DeviceMotionEvent !== "undefined" &&
-                typeof DeviceMotionEvent.requestPermission === "function";
-
-  // --- Definicion de las 3 rayas (mas anchas y granuladas que antes) ---
+  // --- Definicion de las 3 rayas (anchas y granuladas) ---
   const LINEAS = [
-    { x: 0.28, top: 0.16, bottom: 0.74, lean: 0.02,  fase: 11 },
-    { x: 0.50, top: 0.12, bottom: 0.88, lean: 0.01,  fase: 27 },
-    { x: 0.72, top: 0.18, bottom: 0.72, lean: 0.03,  fase: 41 },
+    { x: 0.28, top: 0.16, bottom: 0.74, lean: 0.02, fase: 11 },
+    { x: 0.50, top: 0.12, bottom: 0.88, lean: 0.01, fase: 27 },
+    { x: 0.72, top: 0.18, bottom: 0.72, lean: 0.03, fase: 41 },
   ];
   const MEDIO_ANCHO = 0.028;   // fraccion del ancho -> media anchura de cada raya
   const POR_LINEA = 1100;      // granos por raya
@@ -102,18 +95,10 @@
       for (let i = 0; i < POR_LINEA; i++) {
         granos.push({
           linea: li,
-          f: Math.random(),              // posicion a lo largo de la raya (0..1)
-          off: gauss(),                  // dispersion horizontal en la raya
-          ang: Math.random() * Math.PI * 2, // angulo en la pila
-          rad: Math.sqrt(Math.random()),    // radio en la pila (disco uniforme)
-          jitter: Math.random(),
-          k: 0.045 + Math.random() * 0.05,  // velocidad de asentamiento
+          f: Math.random(),                 // posicion a lo largo de la raya (0..1)
+          off: gauss(),                     // dispersion horizontal en la raya
           tam: Math.random() < 0.28 ? 2 : (Math.random() < 0.06 ? 3 : 1),
-          tono: 255,
           alpha: 0.55 + Math.random() * 0.45,
-          // posiciones calculadas segun tamaño de pantalla
-          px: 0, py: 0, lx: 0, ly: 0,
-          // posicion actual
           x: 0, y: 0,
           vivo: true,
         });
@@ -121,18 +106,9 @@
     }
   }
 
-  function recalcularPosiciones(snap) {
-    const cx0 = 0.5 * ancho;
-    const cy0 = 0.44 * alto;
-    const R = 0.17 * Math.min(ancho, alto); // radio de la pila central
+  function recalcularPosiciones() {
     const spread = Math.max(4, MEDIO_ANCHO * ancho);
-
     for (const g of granos) {
-      // --- posicion en la pila (centro) ---
-      g.px = cx0 + Math.cos(g.ang) * R * g.rad;
-      g.py = cy0 + Math.sin(g.ang) * R * g.rad * 1.05;
-
-      // --- posicion en su raya ---
       const L = LINEAS[g.linea];
       const topY = L.top * alto, botY = L.bottom * alto;
       const largo = botY - topY;
@@ -140,32 +116,15 @@
       const wobble =
         Math.sin(g.f * 9 + L.fase) * spread * 0.55 +
         Math.sin(g.f * 21 + L.fase * 2) * spread * 0.3;
-      g.lx = baseX + L.lean * ancho * g.f + wobble + g.off * spread;
-      g.ly = topY + g.f * largo;
-
-      if (snap) {
-        const enPila = estado === "pila";
-        g.x = enPila ? g.px : g.lx;
-        g.y = enPila ? g.py : g.ly;
-      }
+      g.x = baseX + L.lean * ancho * g.f + wobble + g.off * spread;
+      g.y = topY + g.f * largo;
     }
   }
 
-  // --- Bucle de dibujo ---
   function bucle() {
     ctx.clearRect(0, 0, ancho, alto); // transparente -> se ve el fondo negro
-    const enPila = estado === "pila";
     for (const g of granos) {
       if (!g.vivo) continue;
-      const tx = enPila ? g.px : g.lx;
-      const ty = enPila ? g.py : g.ly;
-      g.x += (tx - g.x) * g.k;
-      g.y += (ty - g.y) * g.k;
-      if (enPila) {
-        // leve temblor para que el polvo parezca vivo
-        g.x += (Math.random() - 0.5) * 0.5;
-        g.y += (Math.random() - 0.5) * 0.5;
-      }
       ctx.fillStyle = "rgba(255,255,255," + g.alpha + ")";
       ctx.fillRect(g.x, g.y, g.tam, g.tam);
     }
@@ -181,81 +140,15 @@
     canvas.style.width = ancho + "px";
     canvas.style.height = alto + "px";
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    recalcularPosiciones(true);
+    recalcularPosiciones();
   }
 
-  // --- Transiciones de estado ---
-  function formarRayas() {
-    if (estado !== "pila") return;
-    estado = "rayas";
-    pista.textContent = "Pasa el dedo para borrar las rayas";
-    pista.style.opacity = "1";
-    boton.textContent = "↺ Reiniciar";
-  }
-
-  function reiniciarPila() {
-    estado = "pila";
+  function reiniciar() {
     for (const g of granos) g.vivo = true;
-    recalcularPosiciones(true);
-    pista.textContent = sensorActivo
-      ? "Agita el teléfono (o pulsa el botón) para formar las rayas"
-      : "Agita el teléfono para formar las 3 rayas";
     pista.style.opacity = "1";
-    boton.textContent = sensorActivo || !esIOS ? "Formar rayas" : "Activar sensor de movimiento";
   }
 
-  // --- Deteccion de agitado ---
-  function onMovimiento(e) {
-    const a = e.acceleration && e.acceleration.x !== null ? e.acceleration
-            : e.accelerationIncludingGravity;
-    if (!a) return;
-    const mag = Math.hypot(a.x || 0, a.y || 0, a.z || 0);
-    // con gravedad el reposo ronda ~9.8; con aceleracion pura ronda ~0
-    const umbral = e.acceleration && e.acceleration.x !== null ? 16 : 22;
-    if (mag > umbral) formarRayas();
-  }
-
-  function activarSensor() {
-    if (sensorActivo) return Promise.resolve(true);
-    if (esIOS) {
-      return DeviceMotionEvent.requestPermission().then((res) => {
-        if (res === "granted") {
-          window.addEventListener("devicemotion", onMovimiento);
-          sensorActivo = true;
-          return true;
-        }
-        return false;
-      }).catch(() => false);
-    }
-    // Android / navegadores que no piden permiso
-    if (typeof DeviceMotionEvent !== "undefined") {
-      window.addEventListener("devicemotion", onMovimiento);
-    }
-    sensorActivo = true;
-    return Promise.resolve(true);
-  }
-
-  boton.addEventListener("click", () => {
-    if (estado === "rayas") { reiniciarPila(); return; }
-    if (!sensorActivo && esIOS) {
-      activarSensor().then((ok) => {
-        if (ok) {
-          pista.textContent = "¡Agita el teléfono! (o pulsa «Formar rayas»)";
-          boton.textContent = "Formar rayas";
-        } else {
-          pista.textContent = "Sin permiso de movimiento. Pulsa «Formar rayas».";
-          boton.textContent = "Formar rayas";
-          sensorActivo = false;
-        }
-      });
-    } else {
-      // ya activado, o navegador sin permiso: formar directamente
-      activarSensor();
-      formarRayas();
-    }
-  });
-
-  // --- Borrado con el dedo (solo cuando ya hay rayas) ---
+  // --- Borrado con el dedo ---
   function borrarEn(x, y) {
     const r2 = radioBorrado * radioBorrado;
     for (const g of granos) {
@@ -277,7 +170,6 @@
     return { x: t.clientX, y: t.clientY };
   }
   function inicio(e) {
-    if (estado !== "rayas") return;
     borrando = true;
     pista.style.opacity = "0";
     const p = posicion(e);
@@ -302,9 +194,7 @@
   canvas.addEventListener("touchend", fin);
   canvas.addEventListener("touchcancel", fin);
   window.addEventListener("resize", ajustarTamano);
-
-  // Si el navegador no es iOS, el boton inicial ya sirve para formar
-  if (!esIOS) boton.textContent = "Formar rayas";
+  boton.addEventListener("click", reiniciar);
 
   crearGranos();
   ajustarTamano();
